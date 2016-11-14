@@ -22,16 +22,16 @@ library(stringdist)
 library(XLConnect)
 
 ##
-insertRow <- function(existingDF, newrow, r) {
-  existingDF[seq(r+1,nrow(existingDF)+1),] <- existingDF[seq(r,nrow(existingDF)),]
-  existingDF[r,] <- newrow
-  existingDF
-}
+#insertRow <- function(existingDF, newrow, r) {
+#  existingDF[seq(r+1,nrow(existingDF)+1),] <- existingDF[seq(r,nrow(existingDF)),]
+#  existingDF[r,] <- newrow
+#  existingDF
+#}
 
 ##Find the file...
 list.files("input")
 n              <- readline(prompt="Enter the folder's name: ") ##list.files("input")[1]
-totalFormFName <- list.files(file.path("input", n), full=T)[grepl("科系職涯地圖", list.files(file.path("input", n)))]
+totalFormFName <- list.files(file.path("input", n), full=T)[grepl("科系職涯地圖", list.files(file.path("input", n))) & !grepl("~$", list.files(file.path("input", n)), fixed = TRUE)]
 
 ##Standard data
 MatchTable    <- read_excel(totalFormFName, sheet = "學系相關資料")
@@ -97,7 +97,7 @@ EmploymentMatchT <- Employment[, .(SchoolName, Department)] %>% unique
 #check <- data.frame("Original"=character(), "Match"=character(), stringsAsFactors = FALSE)
 for(i in 1:nrow(EmploymentMatchT)){
   ##Fuzzy matching : find the Min dist word
-  tmp <- UniMatchT$科系名稱[UniMatchT$學校名稱==Employment$SchoolName[i]][which.min(stringdist(EmploymentMatchT$Department[i], UniMatchT$科系名稱[UniMatchT$學校名稱==Employment$SchoolName[i]] ,method='jw'))][1]
+  tmp <- UniMatchT$科系名稱[UniMatchT$學校名稱==EmploymentMatchT$SchoolName[i]][which.min(stringdist(EmploymentMatchT$Department[i], UniMatchT$科系名稱[UniMatchT$學校名稱==EmploymentMatchT$SchoolName[i]] ,method='jw'))][1]
   
   if(EmploymentMatchT$Department[i]!=tmp){
     Employment$Department[which(Employment$SchoolName==EmploymentMatchT$SchoolName[i] & Employment$Department==EmploymentMatchT$Department[i])] <- tmp
@@ -106,17 +106,21 @@ for(i in 1:nrow(EmploymentMatchT)){
   cat("\r Department Correction : ", format(round(i/nrow(EmploymentMatchT)*100, 2), nsmall=2), " %")
 }
 
-
+##科系名稱沒正規化道!
 
 
 ##########
 ## Module
 ##########
+##DT=Employment
+##school="SchoolName"
+##department="Department"
+##target="職務小類名稱"
 DStatModule <- function(DT, school, department, target){
   ##Try new method...
   ##Not using eval..., just rename the col in the function...
   ##More readable?
-  setDF(DT)
+  setDT(DT)
   names(DT)[which(names(DT)==school)]     <- "School"
   names(DT)[which(names(DT)==department)] <- "Department"
   names(DT)[which(names(DT)==target)]     <- "Target"
@@ -127,10 +131,66 @@ DStatModule <- function(DT, school, department, target){
   
   return(DStatDT)
 }
-#cbnName="名稱(一)"
-UpdateModule <- function(ODT, NDT, cbnName){
+#target="名稱(一)"
+#ODT=OldEmployment
+#NDT=DStatDT
+#switchV= "學校" "產業" "職務"
+UpdateModule <- function(ODT, NDT, target, switchV=""){
   setDT(ODT)
+  setDT(NDT)
+  
+  names(ODT) <- gsub("[()（）]", "_", names(ODT))
+  target     <- gsub("[()（）]", "_", target)
+  
+  if(switchV=="產業" | switchV=="職務"){
+    names(ODT)[which(names(ODT)=="類別_0=職務; 1=產業_")] <- "類別"
+  }
+  
+  ##以新的為基礎? 並完再merge?
+  ##or 直接加在old? => rbind後重新計算? =>取前10與其他
+  SODT <- ODT[類別==0, c("學校名稱", "科系名稱", target, names(ODT) %>% .[which(.==target)+1]), with=F]
+  NDT
+  names(NDT) <- c("學校名稱", "科系名稱", target, names(ODT) %>% .[which(.==target)+1])
+  
+  TDT      <- rbind(SODT, NDT)
+  #tmp_eval <- paste0(names(ODT) %>% .[which(.==target)+1], ":=sum(as.numeric(", names(ODT) %>% .[which(.==target)+1],"))")
+  ##Can't use original weird name... 
+  names(TDT)[4] <- "Freq"
+  
+  #library(magrittr)
+  #TDT$Freq  %>% extract(9997)
+  TDT$Freq[which(TDT$Freq=="NULL")] <- 0
+  TDT$Freq <- as.numeric(TDT$Freq)
+  TDT[, Freq:=sum(as.numeric(Freq), na.rm=T), by=c("學校名稱", "科系名稱", target)]
+  
+  ##該篩出前10根其他
+  TDT[order(學校名稱, 科系名稱, -Freq),]
+  
+  
+  for(i in 1:nrow(NDT)){
+    
+    #ODT[學校名稱==NDT$School[i] & 科系名稱==NDT$Department[i] & 類別==0, c("學校名稱", "科系名稱", target, names(ODT) %>% .[which(.==target)+1]), with=F]
+    
+    
+    
+    if(switchV=="職務"){
+      ODT[學校名稱==NDT$School[i] & 科系名稱==NDT$Department[i], c("學校名稱", "科系名稱", target)]
+    }else if(switchV=="產業"){
+      
+    }else{
+      ##學校
+    }
+  }
+  
+  if(switchV=="職務"){
+    
+  }else if(switchV=="產業"){
+    
+  }else{
+    ##學校
+  }
   #school, department, index of cbnName and the next one
+  
 }
 
 
@@ -141,3 +201,4 @@ UpdateModule <- function(ODT, NDT, cbnName){
 #####################
 ## Start : Employment
 #####################
+Job1 <- DStatModule(Employment, "學校名稱", "科系名稱", "職務小類名稱")
