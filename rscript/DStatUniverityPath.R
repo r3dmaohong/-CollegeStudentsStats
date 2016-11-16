@@ -144,6 +144,11 @@ UpdateModule <- function(ODT, NDT, target, switchV=""){
   
   if(switchV=="產業" | switchV=="職務"){
     names(ODT)[which(names(ODT)=="類別_0=職務; 1=產業_")] <- "類別"
+    if(switchV=="產業"){
+      switchV <- 1
+    }else{
+      switchV <- 0
+    }
   }
   
   ##以新的為基礎? 並完再merge?
@@ -152,35 +157,57 @@ UpdateModule <- function(ODT, NDT, target, switchV=""){
   NDT
   names(NDT) <- c("學校名稱", "科系名稱", target, names(ODT) %>% .[which(.==target)+1])
   
-  TDT      <- rbind(SODT, NDT)
+  TDT      <- rbind(NDT, SODT)
   #tmp_eval <- paste0(names(ODT) %>% .[which(.==target)+1], ":=sum(as.numeric(", names(ODT) %>% .[which(.==target)+1],"))")
   ##Can't use original weird name... 
   names(TDT)[4] <- "Freq"
+  names(TDT)[3] <- "Item"
   
   #library(magrittr)
   #TDT$Freq  %>% extract(9997)
   TDT$Freq[which(TDT$Freq=="NULL")] <- 0
   TDT$Freq <- as.numeric(TDT$Freq)
-  TDT[, Freq:=sum(as.numeric(Freq), na.rm=T), by=c("學校名稱", "科系名稱", target)]
+  TDT$Item[which(TDT$Item=="NULL")] <- "無"
+  TDT[, Freq:=sum(as.numeric(Freq), na.rm=T), by=c("學校名稱", "科系名稱", "Item")]
   
-  ##該篩出前10根其他
-  TDT[order(學校名稱, 科系名稱, -Freq),]
-  
-  
-  for(i in 1:nrow(NDT)){
-    
-    #ODT[學校名稱==NDT$School[i] & 科系名稱==NDT$Department[i] & 類別==0, c("學校名稱", "科系名稱", target, names(ODT) %>% .[which(.==target)+1]), with=F]
-    
-    
-    
-    if(switchV=="職務"){
-      ODT[學校名稱==NDT$School[i] & 科系名稱==NDT$Department[i], c("學校名稱", "科系名稱", target)]
-    }else if(switchV=="產業"){
-      
-    }else{
-      ##學校
+  ##1. Caculate Percentage
+  ##2. Get top N
+  ##3. Use remain percentage to caculate freq
+  TDT[, Percentage:=Freq/sum(Freq), by = c("學校名稱", "科系名稱")]
+  TDT <- TDT[order(學校名稱, 科系名稱, -Freq),]
+  TDT <- TDT[Item!="其他"]
+  TDT
+  TDT <- TDT[, head(.SD, 10), by = c("學校名稱", "科系名稱")]
+  maxNrowTDT <- nrow(TDT)
+  for(i in 1:maxNrowTDT){
+    if((TDT[i, 科系名稱]!=TDT[i+1, 科系名稱] | TDT[i, 學校名稱]!=TDT[i+1, 學校名稱]) & TDT[i, Item]!="其他"){
+      TDT <- rbindlist(list(
+        TDT[1:i], 
+        as.list(c(TDT[i, 學校名稱], TDT[i, 科系名稱], "其他", (as.numeric(TDT$Freq[i])/as.numeric(TDT$Percentage[i])*(1-sum(as.numeric(TDT$Percentage[(i-9):i])))) %>% round(., 0), 1-sum(as.numeric(TDT$Percentage[(i-9):i])))),
+        TDT[(i+1):maxNrowTDT]
+        ))
     }
+    if(i==maxNrowTDT){
+      TDT <- rbindlist(list(
+        TDT, 
+        as.list(c(TDT[i, 學校名稱], TDT[i, 科系名稱], "其他", (as.numeric(TDT$Freq[i])/as.numeric(TDT$Percentage[i])*(1-sum(as.numeric(TDT$Percentage[(i-9):i])))) %>% round(., 0), 1-sum(as.numeric(TDT$Percentage[(i-9):i]))))
+      ))
+    }
+    cat("\r Caculating...", format(round(i/maxNrowTDT*100, 3), nsmall=3), "%")
   }
+
+  
+  ## Using inefficient may be more intuitive...
+  #for(i in 1:nrow(NDT)){
+  #  NDT[i, eval(parse(text=names(NDT)[4]))]
+  #  
+  #  ODT[學校名稱==NDT$學校名稱[i] & 科系名稱==NDT$科系名稱[i] & 類別==switchV & eval(parse(text=paste0(target, "==NDT$", target, "[i]"))), eval(parse(text=names(NDT)[4]))]
+  #  ##如果沒有幼維NULL 就取代NULL?
+  #  ##這樣要先排序好:NDT 免得出現小的取代大的
+  #}
+  
+  
+  
   
   if(switchV=="職務"){
     
