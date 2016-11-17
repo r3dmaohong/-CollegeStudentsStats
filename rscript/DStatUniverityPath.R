@@ -201,23 +201,36 @@ UpdateModule <- function(NDT, ODT, target, switchV=""){
   }
   TDT <- rbind(TDT[Item!="無",], TDT[Item=="無",])
   
-  tmp <- TDT[ , .(學校名稱, 科系名稱)] %>% unique
-  for(i in 1:nrow(tmp)){
-    TDT <- rbindlist(list(TDT,
-                          as.list(c(tmp %>% extract(i) %>% c %>% unlist, 
-                                    "其他", 
-                                    TDT[paste0(學校名稱, 科系名稱)==tmp %>% extract(i) %>% paste0(., collapse=""), Sum][1] %>% as.numeric - sum(as.numeric(TDT[paste0(學校名稱, 科系名稱)==tmp %>% extract(i) %>% paste0(., collapse=""), Freq])), 
-                                    TDT[paste0(學校名稱, 科系名稱)==tmp %>% extract(i) %>% paste0(., collapse=""), Sum][1]
-                          )
-                          )
-                          ))
-    cat("\r Caculating...", format(round(i/nrow(tmp)*100, 3), nsmall=3), "%")
+  ##inefficient..
+  if(F){
+    tmp <- TDT[ , .(學校名稱, 科系名稱)] %>% unique
+    for(i in 1:nrow(tmp)){
+      TDT <- rbindlist(list(TDT,
+                            as.list(c(tmp %>% extract(i) %>% c %>% unlist, 
+                                      "其他", 
+                                      TDT[paste0(學校名稱, 科系名稱)==tmp %>% extract(i) %>% paste0(., collapse=""), Sum][1] %>% as.numeric - sum(as.numeric(TDT[paste0(學校名稱, 科系名稱)==tmp %>% extract(i) %>% paste0(., collapse=""), Freq])), 
+                                      TDT[paste0(學校名稱, 科系名稱)==tmp %>% extract(i) %>% paste0(., collapse=""), Sum][1]
+                            )
+                            )
+      ))
+      cat("\r Caculating...", format(round(i/nrow(tmp)*100, 3), nsmall=3), "%")
+    }
   }
+  
+  ##Use this logic?
+  print("Caculating...")
+  TDT[, SumWithoutOthers:=sum(as.numeric(Freq),na.rm=T), by = c("學校名稱", "科系名稱")]
+  tmp <- TDT[ , .(學校名稱, 科系名稱, Sum, SumWithoutOthers)] %>% unique
+  tmp[,Freq:=as.numeric(Sum)-as.numeric(SumWithoutOthers)]
+  tmp <- cbind(tmp, "其他")
+  names(tmp)[length(names(tmp))] <- "Item"
+  TDT <- rbind(TDT, tmp)
   
   ##比例重算
   ##無往後踢
   TDT[, Percentage:=as.numeric(Freq)/as.numeric(Sum)]
   TDT$Sum <- NULL
+  TDT$SumWithoutOthers <- NULL
   TDT$Percentage[which(TDT$Freq==0)] <- 0
   TDT <- TDT[order(學校名稱, 科系名稱),]
   
