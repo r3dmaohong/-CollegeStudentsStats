@@ -21,6 +21,7 @@ library(dplyr)
 library(stringdist)
 library(XLConnect)
 library(magrittr)
+library(stringi)
 
 ##
 #insertRow <- function(existingDF, newrow, r) {
@@ -133,10 +134,10 @@ DStatModule <- function(DT, school, department, target){
   
   return(DStatDT)
 }
-#target="名稱(一)"
+#target="名稱(四)"
 #ODT=OldEmployment
-#NDT=DStatDT
-#switchV= "學校" "產業" "職務"
+#NDT=Job4
+#switchV="職務"   "學校" "產業" 
 UpdateModule <- function(NDT, ODT, target, switchV=""){
   print(paste0(switchV, ": ", target))
   setDT(ODT)
@@ -169,11 +170,11 @@ UpdateModule <- function(NDT, ODT, target, switchV=""){
   #TDT$Freq  %>% extract(9997)
   TDT$Freq[which(TDT$Freq=="NULL")] <- 0
   TDT$Freq <- as.numeric(TDT$Freq)
-  TDT$Item[which(TDT$Item=="NULL")] <- "無"
+  TDT$Item[which(TDT$Item=="NULL")] <- "No Data"
   TDT[, Freq:=sum(as.numeric(Freq), na.rm=T), by=c("學校名稱", "科系名稱", "Item")]
   
   TDT$UniKey <- 0
-  TDT$UniKey[which(TDT$Item=="無")] <- which(TDT$Item=="無")
+  TDT$UniKey[which(TDT$Item=="No Data")] <- which(TDT$Item=="No Data")
   
   TDT <- TDT %>% unique
   TDT <- TDT[Item!=""]
@@ -187,38 +188,43 @@ UpdateModule <- function(NDT, ODT, target, switchV=""){
   TDT
   TDT <- TDT[, head(.SD, 10), by = c("學校名稱", "科系名稱")]
   
+  ##
+  print(" Patch")
   lack <- table(paste0(TDT$學校名稱, TDT$科系名稱)) %>% as.data.frame(stringsAsFactors=F) %>% .[which(.$Freq!=10), 1]
   lack <- TDT[paste0(學校名稱, 科系名稱) %in% lack, .(學校名稱, 科系名稱)] %>% unique
-  for(i in 1:nrow(lack)){
-    TDT <- rbindlist(list(TDT,
-    as.list(c(lack[i] %>% c %>% unlist, 
-      c("行政人員", "國內業務人員", "門市／店員／專櫃人員", "客服人員", "行政助理", "業務助理")[!(c("行政人員", "國內業務人員", "門市／店員／專櫃人員", "客服人員", "行政助理", "業務助理") %in% TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Item])][1], 
-      ifelse(TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Freq][length(TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Item])]>0,TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Freq][length(TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Item])],1),
-      TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Sum][1] %>% as.numeric + ifelse(TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Freq][length(TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Item])]>0,TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Freq][length(TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Item])],1) %>% as.numeric
-      ))
-    ))
-    TDT$Sum[TDT$學校名稱==lack$學校名稱[i] & TDT$科系名稱==lack$科系名稱[i]] <- TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Sum][length(TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Sum])]
-  }
-  TDT <- rbind(TDT[Item!="無",], TDT[Item=="無",])
-  
-  ##inefficient..
-  if(F){
-    tmp <- TDT[ , .(學校名稱, 科系名稱)] %>% unique
-    for(i in 1:nrow(tmp)){
+  if(nrow(lack)>0){
+    for(i in 1:nrow(lack)){
       TDT <- rbindlist(list(TDT,
-                            as.list(c(tmp %>% extract(i) %>% c %>% unlist, 
-                                      "其他", 
-                                      TDT[paste0(學校名稱, 科系名稱)==tmp %>% extract(i) %>% paste0(., collapse=""), Sum][1] %>% as.numeric - sum(as.numeric(TDT[paste0(學校名稱, 科系名稱)==tmp %>% extract(i) %>% paste0(., collapse=""), Freq])), 
-                                      TDT[paste0(學校名稱, 科系名稱)==tmp %>% extract(i) %>% paste0(., collapse=""), Sum][1]
-                            )
-                            )
+                            as.list(c(lack[i] %>% c %>% unlist, 
+                                      c("行政人員", "國內業務人員", "門市／店員／專櫃人員", "客服人員", "行政助理", "業務助理")[!(c("行政人員", "國內業務人員", "門市／店員／專櫃人員", "客服人員", "行政助理", "業務助理") %in% TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Item])][1], 
+                                      ifelse(TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Freq][length(TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Item])]>0,TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Freq][length(TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Item])],1),
+                                      TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Sum][1] %>% as.numeric + ifelse(TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Freq][length(TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Item])]>0,TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Freq][length(TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Item])],1) %>% as.numeric
+                            ))
       ))
-      cat("\r Caculating...", format(round(i/nrow(tmp)*100, 3), nsmall=3), "%")
+      TDT$Sum[TDT$學校名稱==lack$學校名稱[i] & TDT$科系名稱==lack$科系名稱[i]] <- TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Sum][length(TDT[學校名稱==lack$學校名稱[i] & 科系名稱==lack$科系名稱[i], Sum])]
+      cat("\r Caculating...", format(round(i/nrow(lack)*100, 3), nsmall=3), "%")
     }
   }
   
+  
+  #is.list(TDT)
+  #table(Encoding(TDT[[3]]))
+  #tmp <- TDT$Item %>% iconv("UTF8", "UTF8")
+  #stri_enc_mark(TDT$Item)
+  #all(stri_enc_isutf8(TDT$Item))
+  #TDT$Item <- stri_encode(TDT$Item, "", "UTF-8")
+  #tmp <- stri_trans_general(tmp, "Latin-ASCII")
+  #tmp <-tmp %>% iconv(from="UTF-8", to="UTF8")
+  TDT[, names(TDT) := lapply(.SD, function(x) {if (is.character(x)) Encoding(x) <- "unknown"; x})]
+  TDT <- rbind(TDT[Item!="No Data",], TDT[Item=="No Data",])
+  #TDT[, names(TDT) := lapply(.SD, function(x) {if (is.character(x)) x %>% iconv("UTF-8"); x})]
+  #apply(TDT, 2, class)
+  #for(i in 1:ncol(TDT)){
+  #  TDT[[i]] <- TDT[[i]] %>% iconv("UTF-8")
+  #}
+  
   ##Use this logic?
-  print("Caculating...")
+  cat("\n")
   TDT[, SumWithoutOthers:=sum(as.numeric(Freq),na.rm=T), by = c("學校名稱", "科系名稱")]
   tmp <- TDT[ , .(學校名稱, 科系名稱, Sum, SumWithoutOthers)] %>% unique
   tmp[,Freq:=as.numeric(Sum)-as.numeric(SumWithoutOthers)]
@@ -226,8 +232,7 @@ UpdateModule <- function(NDT, ODT, target, switchV=""){
   names(tmp)[length(names(tmp))] <- "Item"
   TDT <- rbind(TDT, tmp)
   
-  ##比例重算
-  ##無往後踢
+  ## Percentage
   TDT[, Percentage:=as.numeric(Freq)/as.numeric(Sum)]
   TDT$Sum <- NULL
   TDT$SumWithoutOthers <- NULL
@@ -236,22 +241,19 @@ UpdateModule <- function(NDT, ODT, target, switchV=""){
   
   ##table(paste0(TDT$學校名稱, TDT$科系名稱)) %>% as.data.frame(stringsAsFactors=F) %>% .[which(.$Freq!=10),]
   ##TDT[學校名稱=="XXX" & 科系名稱=="XXX"]
+  for(i in 1:ncol(TDT)){
+    TDT[[i]] <- TDT[[i]] %>% iconv("UTF-8")
+  }
+  #which(is.na(TDT$Item)) %% 11 %>% unique
+  TDT$Item[which(is.na(TDT$Item))] <- "其他"
+  TDT$排名 <- 1:11
+  TDT$類別 <- switchV
+  
   names(TDT)[3:5] <- names(ODT)[which(names(ODT)==target):(which(names(ODT)==target)+2)]
+  
+  
   print("Done.")
   return(TDT)
-  
-  
-  
-  if(F){
-    if(switchV=="職務"){
-      
-    }else if(switchV=="產業"){
-      
-    }else{
-      ##學校
-    }
-    #school, department, index of cbnName and the next one
-  }
 }
 
 
@@ -270,4 +272,37 @@ Job3 <- DStatModule(Employment, "SchoolName", "Department", "職務小類名稱2")
 M3   <- UpdateModule(Job3, OldEmployment, "名稱(三)", "職務")
 Job4 <- DStatModule(Employment, "SchoolName", "Department", "職務小類名稱3")
 M4   <- UpdateModule(Job4, OldEmployment, "名稱(四)", "職務")
+
+
+setkey(M1, 學校名稱, 科系名稱, 排名, 類別)
+setkey(M2, 學校名稱, 科系名稱, 排名, 類別)
+setkey(M3, 學校名稱, 科系名稱, 排名, 類別)
+setkey(M4, 學校名稱, 科系名稱, 排名, 類別)
+
+names(OldEmployment)[which(grepl("類別", names(OldEmployment)))] <- "類別"
+
+#tmp <- M1[M2]
+#tmp <- tmp[M3]
+#tmp <- tmp[M4]
+tmp <- OldEmployment[, names(OldEmployment)[which(!grepl("^[名稱 | 百分比 | 樣本數]",names(OldEmployment)))], with=F]
+tmp[, names(tmp) := lapply(.SD, function(x) {if (is.character(x)) Encoding(x) <- "unknown"; x})]
+#table(Encoding(M1[[1]]))
+for(i in 1:ncol(tmp)){
+  tmp[[i]] <- tmp[[i]] %>% iconv("UTF-8")
+}
+tmp <- tmp[類別=="0"]
+setkey(tmp, 學校名稱, 科系名稱, 排名, 類別)
+
+totalM <- Reduce(function(...) merge(..., all = T), list(M1, M2, M3, M4))
+
+names(totalM)
+totalM <- totalM[, lapply(.SD, as.character)]
+setkey(totalM, 學校名稱, 科系名稱, 排名, 類別)
+
+totalM <- tmp[totalM]
+#merge(totalM, tmp, all=T)
+#apply(totalM, 2, class) %>% unique
+#apply(tmp, 2, class) %>% unique
+
+totalM <- totalM[,c(names(totalM)[which(names(totalM)!="類別" & names(totalM)!="排名")], "類別", "排名"), with=F]
 
