@@ -144,18 +144,20 @@ for(i in 1:nrow(JobRenew)){
   OldEmployment$名稱.四.[which(OldEmployment$名稱.四.==JobRenew$old[i])] <- JobRenew$new[i]
   cat("\r Job Renew : " , format(round(i/nrow(JobRenew)*100), nsmall=2), "%")
 }
+##氣象學類 -> 大氣科學學類
+OldEducation$名稱[OldEducation$名稱=="氣象學類"] <- "大氣科學學類"
 
 ##Remove redundant curriculum vitaes...
 RawEmployment$履歷編號 <- NULL
 RawEmployment <- unique(setDT(RawEmployment))
 
 Employment <- RawEmployment[, c("會員編號","學校代碼", "學校名稱", "科系名稱", "科系類別代號", 
-                           "科系類別名稱", "產業小類代碼", "產業小類名稱", 
-                           "職務小類代碼", "職務小類名稱", "產業小類代碼1",
-                           "產業小類名稱1", "職務小類代碼1", "職務小類名稱1",
-                           "產業小類代碼2", "產業小類名稱2", "職務小類代碼2",
-                           "職務小類名稱2", "產業小類代碼3", "產業小類名稱3", 
-                           "職務小類代碼3", "職務小類名稱3"), with=FALSE ]
+                                "科系類別名稱", "產業小類代碼", "產業小類名稱", 
+                                "職務小類代碼", "職務小類名稱", "產業小類代碼1",
+                                "產業小類名稱1", "職務小類代碼1", "職務小類名稱1",
+                                "產業小類代碼2", "產業小類名稱2", "職務小類代碼2",
+                                "職務小類名稱2", "產業小類代碼3", "產業小類名稱3", 
+                                "職務小類代碼3", "職務小類名稱3"), with=FALSE ]
 
 Employment <- Employment[!grepl("[0-9]", 學校名稱)]
 Employment <- Employment[!grepl("學分班", 科系名稱)]
@@ -182,7 +184,7 @@ Employment$SchoolName <- Employment$學校名稱
 Employment$Department <- Employment$科系名稱
 Employment <- Employment[!is.na(科系名稱)]
 
-UniMatchT        <- MatchTable[, c("學校名稱", names(MatchTable)[11])] %>% unique
+UniMatchT <- MatchTable[, c("學校名稱", names(MatchTable)[11])] %>% unique
 EncodingCheck(UniMatchT)
 setDT(UniMatchT)
 UniMatchT[, names(UniMatchT) := lapply(.SD, function(x) {if (is.character(x)) Encoding(x) <- "unknown"; x})]
@@ -199,6 +201,7 @@ names(RawEducation)[9] <- "Department"
 Education <- RawEducation[就學地區2!=""] 
 EducationMatchT <- Education[, .(SchoolName, Department)] %>% unique
 
+##Employment
 #check <- data.frame("Original"=character(), "Match"=character(), stringsAsFactors = FALSE)
 for(i in 1:nrow(EmploymentMatchT)){
   ##Fuzzy matching : find the Min dist word
@@ -219,7 +222,7 @@ for(i in 1:length(SchoolNameT)){
   if(SchoolNameT[i]!=tmp){
     Education$SchoolName[which(Education$SchoolName==SchoolNameT[i])] <- tmp
     #check <- insertRow(check, c(EmploymentMatchT$Department[i], tmp), 1)
-    EducationMatchT[which(EducationMatchT$SchoolName==SchoolNameT[i])] <- tmp
+    EducationMatchT$SchoolName[which(EducationMatchT$SchoolName==SchoolNameT[i])] <- tmp
   } 
 }
 ## Department
@@ -238,9 +241,10 @@ names(Education)[17] <- "晉升學校名稱"
 names(Education)[18] <- "待除錯晉升學校名稱"
 Education$晉升學校名稱[which(Education$就學地區=="" & Education$晉升學校名稱=="")] <- "國外地區大學"
 Education$晉升學校名稱[which(Education$晉升學校名稱=="")] <- Education$待除錯晉升學校名稱[which(Education$晉升學校名稱=="")]
+nrow(Education[is.na(Education$晉升學校名稱)])
 Education <- Education[!is.na(Education$晉升學校名稱)]
 ## School
-SchoolNameT       <- Education$晉升學校名稱 %>% unique 
+SchoolNameT <- Education$晉升學校名稱 %>% unique 
 for(i in 1:length(SchoolNameT)){
   tmp <- CorrectSchoolName[which.min(stringdist(gsub("大學", "", gsub("專科", "", gsub("管理", "", SchoolNameT[i]))), UniMatchT$學校名稱 %>% unique ,method='jw'))][1]
   
@@ -265,7 +269,7 @@ DStatModule <- function(DT, school, department, target){
   names(DT)[which(names(DT)==school)]     <- "School"
   names(DT)[which(names(DT)==department)] <- "Department"
   names(DT)[which(names(DT)==target)]     <- "Target"
-
+  
   DStatDT <- DT[ , .N, by= .(School, Department, Target)]
   DStatDT <- DStatDT[order(School, Department, -N)]
   #DStatDT[, Percentage:=N/sum(N), by = .(School, Department)]
@@ -308,7 +312,7 @@ UpdateModule <- function(NDT, ODT, target, switchV=""){
   }else{
     switchV <- 0
   }
-
+  
   SODT <- ODT[類別==switchV, c("學校名稱", "科系名稱", target, names(ODT) %>% .[which(.==target)+1]), with=F]
   NDT
   names(NDT) <- c("學校名稱", "科系名稱", target, names(ODT) %>% .[which(.==target)+1])
@@ -441,21 +445,21 @@ BalanceModule <- function(DF1, DF2, colName){
         if(DF2[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i], colName, with=F][11] %>% c %>% as.numeric > 0){
           
           DF2[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i] & 排名==11, 
-              eval(colName):=
-                as.character(DF2[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i], colName, with=F][11] %>% c %>% as.numeric + abs(DF1sum$Diff[i])),
-              with=F]
+                  eval(colName):=
+                    as.character(DF2[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i], colName, with=F][11] %>% c %>% as.numeric + abs(DF1sum$Diff[i])),
+                  with=F]
           ##Add to the first one..
         }else if(DF2[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i], colName, with=F][1] %>% c %>% as.numeric > 0){
           DF2[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i] & 排名==1, 
-              eval(colName):=
-                as.character(DF2[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i], colName, with=F][1] %>% c %>% as.numeric + abs(DF1sum$Diff[i])),
-              with=F]
+                  eval(colName):=
+                    as.character(DF2[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i], colName, with=F][1] %>% c %>% as.numeric + abs(DF1sum$Diff[i])),
+                  with=F]
         }else{
           DF2[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i], eval(names(DF2)[which(names(DF2)==colName)-1]):="Error", with=F]
           DF2[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i] & 排名==1, 
-              eval(colName):=
-                as.character(abs(DF1sum$Diff[i])),
-              with=F]
+                  eval(colName):=
+                    as.character(abs(DF1sum$Diff[i])),
+                  with=F]
         }
       }else{
         #DF1[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i], c("學校名稱", "科系名稱", colName), with=F]
@@ -464,25 +468,28 @@ BalanceModule <- function(DF1, DF2, colName){
         if(DF1[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i], colName, with=F][11] %>% c %>% as.numeric > 0){
           
           DF1[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i] & 排名==11, 
-              eval(colName):=
-                as.character(DF1[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i], colName, with=F][11] %>% c %>% as.numeric + abs(DF1sum$Diff[i])),
-              with=F]
+                  eval(colName):=
+                    as.character(DF1[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i], colName, with=F][11] %>% c %>% as.numeric + abs(DF1sum$Diff[i])),
+                  with=F]
           ##Add to the first one..
         }else if(DF1[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i], colName, with=F][1] %>% c %>% as.numeric > 0){
           DF1[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i] & 排名==1, 
-              eval(colName):=
-                as.character(DF1[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i], colName, with=F][1] %>% c %>% as.numeric + abs(DF1sum$Diff[i])),
-              with=F]
+                  eval(colName):=
+                    as.character(DF1[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i], colName, with=F][1] %>% c %>% as.numeric + abs(DF1sum$Diff[i])),
+                  with=F]
         }else{
           DF1[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i], eval(names(DF1)[which(names(DF1)==colName)-1]):="Error", with=F]
           DF1[學校名稱==DF1sum$學校名稱[i] & 科系名稱==DF1sum$科系名稱[i] & 排名==1, 
-              eval(colName):=
-                as.character(abs(DF1sum$Diff[i])),
-              with=F]
+                  eval(colName):=
+                    as.character(abs(DF1sum$Diff[i])),
+                  with=F]
         }
       }
     }
     print("Balance complete.")
+    
+    DF1[,eval(parse(text=names(DF1)[which(names(DF1)==colName)+1])):=as.character(as.numeric(eval(parse(text=names(DF1)[which(names(DF1)==colName)])))/sum(as.numeric(eval(parse(text=names(DF1)[which(names(DF1)==colName)]))))), by=.(學校名稱, 科系名稱)]
+    DF2[,eval(parse(text=names(DF2)[which(names(DF2)==colName)+1])):=as.character(as.numeric(eval(parse(text=names(DF2)[which(names(DF2)==colName)])))/sum(as.numeric(eval(parse(text=names(DF2)[which(names(DF2)==colName)]))))), by=.(學校名稱, 科系名稱)]
   }else{
     print("Need not to balance.")
   }
@@ -495,6 +502,7 @@ BalanceModule <- function(DF1, DF2, colName){
 ########################
 School1 <- DStatModule(Education, "SchoolName", "Department", "晉升學校名稱")
 M1   <- UpdateModule(School1, OldEducation, "名稱", "學校")
+#data.frame(table(paste0(M1$學校名稱, M1$科系名稱))) %$% .[which(Freq!=11),]
 setkey(M1, 學校名稱, 科系名稱, 排名, 類別)
 
 names(OldEducation)[which(grepl("類別", names(OldEducation)))] <- "類別"
