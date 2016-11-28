@@ -245,6 +245,7 @@ nrow(Education[is.na(Education$晉升學校名稱)])
 Education <- Education[!is.na(Education$晉升學校名稱)]
 ## School
 SchoolNameT <- Education$晉升學校名稱 %>% unique 
+SchoolNameT <- SchoolNameT[!grepl("國外地區", SchoolNameT)]
 for(i in 1:length(SchoolNameT)){
   tmp <- CorrectSchoolName[which.min(stringdist(gsub("大學", "", gsub("專科", "", gsub("管理", "", SchoolNameT[i]))), UniMatchT$學校名稱 %>% unique ,method='jw'))][1]
   
@@ -252,7 +253,8 @@ for(i in 1:length(SchoolNameT)){
     Education$晉升學校名稱[which(Education$晉升學校名稱==SchoolNameT[i])] <- tmp
   } 
 }
-
+Education$晉升學校名稱[which(Education$晉升學校名稱=="國立新竹教育大學")] <- "國立清華大學"
+OldEducation$名稱[which(OldEducation$名稱=="國立新竹教育大學")] <- "國立清華大學"
 
 ##########
 ## Module
